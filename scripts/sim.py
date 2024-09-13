@@ -90,7 +90,7 @@ def simulate(
             # Get the observation from the motion capture system
             # Compute control input.
             action = ctrl.compute_control(obs, info)
-            obs, reward, terminated, truncated, info = env.step(action)
+            obs, reward, terminated, truncated, info = env.step(action, cmd_type=ctrl.cmd_type)#"thrust")
             done = terminated or truncated
             # Update the controller internal state and models.
             ctrl.step_learn(action, obs, reward, terminated, truncated, info)

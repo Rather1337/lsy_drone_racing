@@ -57,6 +57,8 @@ class Controller(BaseController):
         self.policy = PPO.load(Path(__file__).resolve().parents[1] / "models/ppo/model.zip")
         self._last_action = np.zeros(3)
 
+        self.cmd_type = "pos"
+
     def compute_control(
         self, obs: npt.NDArray[np.floating], info: dict | None = None
     ) -> npt.NDarray[np.floating]:

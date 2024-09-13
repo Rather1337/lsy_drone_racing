@@ -70,7 +70,7 @@ class DroneRacingEnv(gymnasium.Env):
             raise NotImplementedError("Firmware wrapper does not support multiple drones.")
         return obs.astype(np.float32), self.info
 
-    def step(self, action: np.ndarray):
+    def step(self, action: np.ndarray, cmd_type="pos"):
         """Step the firmware_wrapper class and its environment.
 
         This function should be called once at the rate of ctrl_freq. Step processes and high level
@@ -81,8 +81,14 @@ class DroneRacingEnv(gymnasium.Env):
         """
         zeros = np.zeros(3, dtype=np.float64)
         action = action.astype(np.float64)  # Drone firmware expects float64
-        pos, yaw = action[:3], action[3]
-        self.drone.full_state_cmd(pos, zeros, zeros, yaw, zeros)
+        if cmd_type == "pos":
+            pos, yaw = action[:3], action[3]
+            self.drone.full_state_cmd(pos, zeros, zeros, yaw, zeros)
+        else:
+            # thrust interface
+            cmd_rpy = action[:3]
+            cmd_thrust = action[3]
+            self.drone.rpyt_state_cmd(cmd_rpy, cmd_thrust)
 
         thrust = self.drone.desired_thrust
         collision = False

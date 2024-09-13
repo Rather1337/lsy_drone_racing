@@ -147,8 +147,11 @@ class Drone:
     ):
         self._state.timestamp = timestamp
         # Legacy cf coordinate system uses inverted pitch
-        self._state.roll, self._state.pitch, self._state.yaw = rpy * np.array([1, -1, 1])
+        # This does not seem to have an effect on the mellinger controller, you can change the pitch sign and
+        # the controller still works. However, if you change the quaternion you will see an effect.
+        self._state.roll, self._state.pitch, self._state.yaw = rpy * np.array([1,-1,1])
         if self._controller == "mellinger":  # Requires quaternion
+            # rpy = rpy * np.array([1,-1,1]) TODO: this may sound like a good idea, but does not work.
             quat = R.from_euler("XYZ", rpy, degrees=True).as_quat()
             quat_state = self._state.attitudeQuaternion
             quat_state.x, quat_state.y, quat_state.z, quat_state.w = quat
@@ -203,6 +206,56 @@ class Drone:
         # This may end up skipping control loops
         self._setpoint.timestamp = int(timestep * 1000)
         self._fullstate_cmd = True
+
+    def rpyt_state_cmd(
+        self,
+        rpy: npt.NDArray[np.float64],
+        thrust: np.float64,
+    ):
+        """rpyt alternative to full_state_cmd
+
+        Notes:
+            Overrides any high level commands being processed.
+
+        Args:
+            rpy: [roll, pitch, yaw] orientation of the CF (degree)
+            thrust: thrust of rotors (PWM)
+        """
+        # All choices were made with respect to src/mod/src/crtp_commander_rpyt.c in the firmware.
+
+        timestep = self._tick / self.params.firmware_freq
+        self.firmware.crtpCommanderHighLevelStop()  # Resets planner object
+        self.firmware.crtpCommanderHighLevelUpdateTime(timestep)
+
+        # Set Setpoints to be passed to the firmware.
+        self._setpoint.position.x, self._setpoint.position.y, self._setpoint.position.z = np.zeros(3, dtype=np.float64) 
+        self._setpoint.velocity.x, self._setpoint.velocity.y, self._setpoint.velocity.z = np.array([0.0, 0.0, (thrust - 32767.0) / 32767.0]).astype(np.float64)
+
+        self._setpoint.thrust = thrust
+
+        s_acc = self._setpoint.acceleration
+        s_acc.x, s_acc.y, s_acc.z = np.zeros(3, dtype=np.float64) 
+
+        s_a_rate = self._setpoint.attitudeRate
+        s_a_rate.roll, s_a_rate.pitch, s_a_rate.yaw = np.zeros(3, dtype=np.float64) 
+
+        s_a= self._setpoint.attitude
+        s_a.roll, s_a.pitch, s_a.yaw = rpy
+
+        s_quat = self._setpoint.attitudeQuaternion
+        s_quat.x, s_quat.y, s_quat.z, s_quat.w = R.from_euler("XYZ", rpy, degrees=True).as_quat()
+
+        # initilize setpoint modes to match thrustinterface.
+        mode = self._setpoint.mode
+        mode_abs, mode_disable, mode_velocity = self.firmware.modeAbs, self.firmware.modeDisable, self.firmware.modeVelocity
+        mode.x, mode.y, mode.z = mode_disable, mode_disable, mode_velocity
+        mode.quat = mode_disable
+        mode.roll, mode.pitch, mode.yaw = mode_abs, mode_abs, mode_abs
+
+        # This may end up skipping control loops
+        self._setpoint.timestamp = int(timestep * 1000)
+        self._fullstate_cmd = True
+
 
     def takeoff_cmd(self, height: float, duration: float, yaw: float | None = None) -> None:
         """Send a takeoff command to the controller.
