@@ -167,6 +167,7 @@ class DroneRacingEnv(gymnasium.Env):
         obstacles_pos[in_range] = np.stack([o["pos"] for o in obstacles.values()])[in_range]
         info["obstacles.pos"] = obstacles_pos
         info["obstacles.in_range"] = in_range
+        info["pyb_client"] = self.sim.pyb_client # As a way to access the pybullet client from inside the controller to draw debug lines for example.
 
         if self.symbolic:
             info["symbolic.model"] = self.sim.symbolic()

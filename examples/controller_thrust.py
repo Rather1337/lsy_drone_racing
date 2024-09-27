@@ -34,8 +34,13 @@ import numpy as np
 import numpy.typing as npt
 from stable_baselines3 import PPO
 
+from scipy.interpolate import CubicSpline, interp1d, splrep, splev, make_interp_spline
+import numpy as np
+import matplotlib.pyplot as plt
+
 from lsy_drone_racing.controller import BaseController
 from lsy_drone_racing.wrapper import ObsWrapper
+from lsy_drone_racing.utils.utils import draw_trajectory, draw_segment_of_traj
 
 import matplotlib.pyplot as plt
 
@@ -187,19 +192,78 @@ class Controller(BaseController):
         """
         super().__init__(initial_obs, initial_info)
 
+        self.initial_obs = initial_obs
+        self.initial_info = initial_info
+
         self.thrust_ctrl = PositionController()
         self.counter = 0
-
         self.cmd_type="thrust"
 
-    def circle(self, t, a=1.0, completion_time=1.0):
-        # 2D circle motion in 1s
-        c = completion_time
-        x = a*np.cos(2 * np.pi * t/c)
-        x_dot = -2*a*np.pi/c * np.sin(2 * np.pi * t/c)
-        y = a*np.sin(2 * np.pi * t/c)
-        y_dot = 2*a*np.pi/c * np.cos(2 * np.pi * t/c)
-        return x, y, x_dot, y_dot
+        start_position = initial_obs[:3]
+        gate_positions = initial_info["gates.pos"]
+        gates_orientations = initial_info["gates.rpy"]
+        gates_in_range = initial_info["gates.in_range"]
+        obstacle_positions = initial_info["obstacles.pos"]
+        obstacles_in_range = initial_info["obstacles.in_range"]
+
+        waypoints = []
+        waypoints.append([1, 1, 0.05])
+        gates = gate_positions 
+        z_low = 0.525 
+        z_high = 1.0 
+        waypoints.append([1, 0, z_low])
+        waypoints.append(
+            [
+                (gates[0][0] + gates[1][0]) / 2 - 0.7,
+                (gates[0][1] + gates[1][1]) / 2 - 0.3,
+                (z_low + z_high) / 3,
+            ]
+        )
+        waypoints.append(
+            [
+                (gates[0][0] + gates[1][0]) / 2 - 0.5,
+                (gates[0][1] + gates[1][1]) / 2 - 0.6,
+                (z_low + z_high) / 2,
+            ]
+        )
+        waypoints.append([gates[1][0] - 0.4, gates[1][1] - 0.4, z_high])
+        waypoints.append([gates[1][0], gates[1][1], z_high]) # added
+        waypoints.append([gates[1][0] + 0.2, gates[1][1] + 0.4, z_high])
+        waypoints.append([gates[2][0]+0.2, gates[2][1] - 0.5, z_low])
+        waypoints.append([gates[2][0] -0.3, gates[2][1]+0.5, z_low]) # added
+        waypoints.append([gates[2][0], gates[2][1] + 0.2, z_high + 0.2])
+        waypoints.append([gates[3][0], gates[3][1] + 0.1, z_high])
+        waypoints.append([gates[3][0], gates[3][1] - 0.1, z_high + 0.1])
+        waypoints = np.array(waypoints)
+        print(f"waypoints: {waypoints}")
+
+        xs = waypoints[:,0]
+        ys = waypoints[:,1]
+        zs = waypoints[:,2]
+
+        # scale trajecotry between 0 and 1 for now.
+        ts = np.linspace(0,1,np.shape(waypoints)[0])
+        cs_x = CubicSpline(ts,xs)
+        cs_y = CubicSpline(ts,ys)
+        cs_z = CubicSpline(ts,zs)
+
+        # control input is 30Hz, this way we can say how fast he should run through the course.
+        des_completion_time = 10 
+        ts = np.linspace(0, 1, int(30 * des_completion_time))
+
+        self.traj = []
+
+        self.x_des = cs_x(ts)
+        self.y_des = cs_y(ts)
+        self.z_des = cs_z(ts)
+
+        # create another trajectory sample freqency for the plotting
+        ts_plot = np.linspace(0,1,10_000)
+
+        # Draw interpolated Trajectory
+        draw_trajectory(initial_info, waypoints, cs_x(ts_plot), cs_y(ts_plot), cs_z(ts_plot), num_plot_points=200)
+
+        self.traj.append(start_position)
 
 
     def compute_control(
@@ -224,17 +288,8 @@ class Controller(BaseController):
         vel = obs[6:9]
         ang_vel = obs[9:12]
 
-        if self.counter < 100:
-            des_pos = np.array([1.0, 1.0, 0.5])
-            des_vel = np.zeros(3)
-        else:
-            x,y,x_dot,y_dot = self.circle((self.counter-100)/300)
-            # ignore vel for now
-            x_dot *=0 #1/1000
-            y_dot *=0 #1/1000
-            z = 0.5
-            des_pos = np.array([x+0, y+1, z]) # shift circle to drone start position
-            des_vel = np.array([x_dot, y_dot, 0.0])
+        des_pos = np.array([self.x_des[self.counter], self.y_des[self.counter], self.z_des[self.counter]])
+        des_vel = np.zeros(3) 
         des_yaw = 0.0
         dt = 1/500 # TODO: Verify Simulation Freq. and control freq(this) with firmware ctrl freq
 
@@ -251,12 +306,11 @@ class Controller(BaseController):
 
         self.counter +=1
 
-        if self.counter == 400:
-            plt.plot(dd["pos_des"])
-            plt.plot(dd["pos"])
-            plt.legend(("x_d", "y_d", "z_d", "x", "y", "z"))
-            plt.title("Circle XY")
-            plt.show()
+        # draw actual drone trajectory in green - increases simulation time significantly however
+        draw_segment_of_traj(self.initial_info, self.traj[-1], pos, [0,1,0,1])
+
+        self.traj.append(pos)
+
         return action
 
     @staticmethod

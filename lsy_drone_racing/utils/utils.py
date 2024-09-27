@@ -135,27 +135,45 @@ def draw_trajectory(
     ref_x: np.ndarray,
     ref_y: np.ndarray,
     ref_z: np.ndarray,
+    num_plot_points: int = 50,
+    color=[1,0,0,1]
 ):
     """Draw a trajectory in PyBullet's GUI."""
     for point in waypoints:
-        urdf_path = Path(initial_info["urdf_dir"]) / "sphere.urdf"
-        p.loadURDF(
-            str(urdf_path),
-            [point[0], point[1], point[2]],
-            p.getQuaternionFromEuler([0, 0, 0]),
-            physicsClientId=initial_info["pyb_client"],
-        )
-    step = int(ref_x.shape[0] / 50)
+        sphere_pos = point
+        visual_shape_id = p.createVisualShape(shapeType=p.GEOM_SPHERE, radius=0.05, rgbaColor=color)
+        p.createMultiBody(baseMass=0, baseVisualShapeIndex=visual_shape_id, basePosition=sphere_pos)
+
+    step = int(ref_x.shape[0] / num_plot_points)
     for i in range(step, ref_x.shape[0], step):
         p.addUserDebugLine(
             lineFromXYZ=[ref_x[i - step], ref_y[i - step], ref_z[i - step]],
             lineToXYZ=[ref_x[i], ref_y[i], ref_z[i]],
-            lineColorRGB=[1, 0, 0],
+            lineWidth=5,
+            lineColorRGB=color[:3],
             physicsClientId=initial_info["pyb_client"],
         )
     p.addUserDebugLine(
         lineFromXYZ=[ref_x[i], ref_y[i], ref_z[i]],
         lineToXYZ=[ref_x[-1], ref_y[-1], ref_z[-1]],
-        lineColorRGB=[1, 0, 0],
+        lineWidth=5,
+        lineColorRGB=color[:3],
         physicsClientId=initial_info["pyb_client"],
     )
+
+def draw_segment_of_traj(
+    initial_info: dict,
+    start_point,
+    end_point,
+    color=[1,0,0,1]
+):
+    """Draw line between two points using PyBullet."""
+
+    p.addUserDebugLine(
+            lineFromXYZ=start_point,
+            lineToXYZ=end_point,
+            lineWidth=5,
+            lineColorRGB=color[:3],
+            physicsClientId=initial_info["pyb_client"],
+        )
+    return
