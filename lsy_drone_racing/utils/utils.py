@@ -144,7 +144,7 @@ def draw_trajectory(
         visual_shape_id = p.createVisualShape(shapeType=p.GEOM_SPHERE, radius=0.05, rgbaColor=color)
         p.createMultiBody(baseMass=0, baseVisualShapeIndex=visual_shape_id, basePosition=sphere_pos)
 
-    step = int(ref_x.shape[0] / num_plot_points)
+    step = max(int(ref_x.shape[0] / num_plot_points), 1)
     for i in range(step, ref_x.shape[0], step):
         p.addUserDebugLine(
             lineFromXYZ=[ref_x[i - step], ref_y[i - step], ref_z[i - step]],
@@ -165,14 +165,15 @@ def draw_segment_of_traj(
     initial_info: dict,
     start_point,
     end_point,
-    color=[1,0,0,1]
+    color=[1,0,0,1],
+    lineWidth=5,
 ):
     """Draw line between two points using PyBullet."""
 
     p.addUserDebugLine(
             lineFromXYZ=start_point,
             lineToXYZ=end_point,
-            lineWidth=5,
+            lineWidth=lineWidth,
             lineColorRGB=color[:3],
             physicsClientId=initial_info["pyb_client"],
         )

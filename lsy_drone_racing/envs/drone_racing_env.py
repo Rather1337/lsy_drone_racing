@@ -82,15 +82,25 @@ class DroneRacingEnv(gymnasium.Env):
         zeros = np.zeros(3, dtype=np.float64)
         action = action.astype(np.float64)  # Drone firmware expects float64
         if cmd_type == "pos":
+            # pos, yaw cmd
             pos, yaw = action[:3], action[3]
             self.drone.full_state_cmd(pos, zeros, zeros, yaw, zeros)
+        elif cmd_type == "full_cmd":
+            # full state cmd
+            pos = action[:3]
+            vel = action[3:6]
+            acc = action[6:9]
+            yaw = action[9]
+            rpy_rate = action[10:]
+            self.drone.full_state_cmd(pos, vel, acc, yaw, rpy_rate)
         else:
-            # thrust interface
+            # thrust interface: rpy, thrust
             cmd_rpy = action[:3]
             cmd_thrust = action[3]
             self.drone.rpyt_state_cmd(cmd_rpy, cmd_thrust)
 
-        thrust = self.drone.desired_thrust
+        #thrust = self.drone.desired_thrust
+        thrust = self.sim.drone.desired_thrust # before we were talking about two different drone instances below and above this loop
         collision = False
         while self.drone.tick / self.drone.firmware_freq < (self._steps + 1) / self.step_freq:
             self.sim.step(thrust)

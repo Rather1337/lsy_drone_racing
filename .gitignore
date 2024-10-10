@@ -7,3 +7,6 @@ secrets
 **/*.secret
 saves
 .pytest_cache
+**/c_generated_code/
+*.pyc
+
